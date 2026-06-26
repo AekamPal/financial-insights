@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { TrendingUp, TrendingDown, Activity, Info, ChevronDown, ChevronUp, Minus, ExternalLink, Sliders, RotateCcw } from 'lucide-react';
-import { resolveModel, estimate } from '../utils/regressionModels';
+import { resolveModel, estimate, multivariateOLS, momPct, EMPIRICAL } from '../utils/regressionModels';
 
 // ── Tooltip ───────────────────────────────────────────────────────────────────
 
@@ -1093,27 +1093,29 @@ function computeWindowChange(quotes, quoteKey, fallbackQuoteKey, seriesKey, comm
 
 // ── Multi-factor constants ────────────────────────────────────────────────────
 
+// xKey must match keys in commodityHistory prop (crude/gold/silver/copper/natgas)
+// or allSeries prop (usdinr, nifty, inflation, fedRate, repoRate)
 const MF_MODEL_SERIES = {
-  crude_cpi:      { xKey: 'BRENT',       yKey: 'inflation'     },
-  crude_usdinr:   { xKey: 'BRENT',       yKey: 'usdinr'        },
-  crude_nifty:    { xKey: 'BRENT',       yKey: 'nifty'         },
-  gold_usdinr:    { xKey: 'GOLD',        yKey: 'usdinr'        },
-  gold_nifty:     { xKey: 'GOLD',        yKey: 'nifty'         },
-  silver_metal:   { xKey: 'SILVER',      yKey: 'niftyMetal'    },
-  copper_capex:   { xKey: 'COPPER',      yKey: 'niftyCapGoods' },
-  copper_metal:   { xKey: 'COPPER',      yKey: 'niftyMetal'    },
-  usdinr_it:      { xKey: null,          yKey: 'niftyIT'       },
-  usdinr_cpi:     { xKey: null,          yKey: 'inflation'     },
-  natgas_fert:    { xKey: 'NATURAL_GAS', yKey: null            },
-  repo_nifty:     { xKey: null,          yKey: 'nifty'         },
-  repo_niftybank: { xKey: null,          yKey: 'niftyBank'     },
-  repo_usdinr:    { xKey: null,          yKey: 'usdinr'        },
-  repo_realty:    { xKey: null,          yKey: 'niftyRealty'   },
-  repo_gold:      { xKey: null,          yKey: 'gold'          },
-  fed_usdinr:     { xKey: null,          yKey: 'usdinr'        },
-  fed_nifty:      { xKey: null,          yKey: 'nifty'         },
-  fed_niftyit:    { xKey: null,          yKey: 'niftyIT'       },
-  fed_gold:       { xKey: null,          yKey: 'gold'          },
+  crude_cpi:      { xKey: 'crude',  yKey: 'inflation'  },
+  crude_usdinr:   { xKey: 'crude',  yKey: 'usdinr'     },
+  crude_nifty:    { xKey: 'crude',  yKey: 'nifty'      },
+  gold_usdinr:    { xKey: 'gold',   yKey: 'usdinr'     },
+  gold_nifty:     { xKey: 'gold',   yKey: 'nifty'      },
+  silver_metal:   { xKey: 'silver', yKey: 'niftyMetal' },
+  copper_capex:   { xKey: 'copper', yKey: 'niftyCapGoods' },
+  copper_metal:   { xKey: 'copper', yKey: 'niftyMetal' },
+  usdinr_it:      { xKey: 'usdinr', yKey: 'niftyIT'    },
+  usdinr_cpi:     { xKey: 'usdinr', yKey: 'inflation'  },
+  natgas_fert:    { xKey: 'natgas', yKey: 'niftyFert'  },
+  repo_nifty:     { xKey: null,     yKey: 'nifty'      },
+  repo_niftybank: { xKey: null,     yKey: 'niftyBank'  },
+  repo_usdinr:    { xKey: null,     yKey: 'usdinr'     },
+  repo_realty:    { xKey: null,     yKey: 'niftyRealty'},
+  repo_gold:      { xKey: null,     yKey: 'gold'       },
+  fed_usdinr:     { xKey: null,     yKey: 'usdinr'     },
+  fed_nifty:      { xKey: null,     yKey: 'nifty'      },
+  fed_niftyit:    { xKey: null,     yKey: 'niftyIT'    },
+  fed_gold:       { xKey: null,     yKey: 'gold'       },
 };
 
 // quoteKey = primary (Kite/MCX); fallbackKey = Yahoo Finance key used when primary is absent
@@ -1221,13 +1223,59 @@ export default function ImpactAnalyzer({ quotes, commodityHistory, allSeries, rs
   }, [mfChanges, quotes, allSeries, mfCfg]);
 
   const mfImpacts = useMemo(() => {
+    if (!mfVisible.length) return [];
+
+    // Identify non-rate commodity factors (have real xKey → can run OLS)
+    const commVis = mfVisible.filter(s => !s.isRate && MF_MODEL_SERIES[s.modelKey]?.xKey);
+
+    // Target MoM% map (all commodity factors share the same yKey)
+    const yKey    = MF_MODEL_SERIES[commVis[0]?.modelKey]?.yKey;
+    const ySeries = yKey ? (allSeries?.[yKey] ?? []) : [];
+    const yMap    = momPct(ySeries);
+
+    // Per-commodity-factor MoM% maps (allSeries = AV official data preferred; fallback to Yahoo Finance)
+    const xSer = key => allSeries?.[key] ?? commodityHistory?.[key] ?? [];
+    const factorMaps = commVis.map(src => ({
+      src,
+      xMap: momPct(xSer(MF_MODEL_SERIES[src.modelKey].xKey)),
+    }));
+
+    // Run multivariate OLS when 2+ commodity factors are visible
+    let mvResult = null;
+    if (commVis.length >= 2) {
+      const commonMonths = Object.keys(yMap).filter(m => factorMaps.every(fm => fm.xMap[m] != null));
+      if (commonMonths.length >= commVis.length + 3) {
+        mvResult = multivariateOLS(
+          commonMonths.map(m => ({ xs: factorMaps.map(fm => fm.xMap[m]), y: yMap[m] }))
+        );
+      }
+    }
+
     return mfVisible.map(src => {
-      const ms      = MF_MODEL_SERIES[src.modelKey] ?? {};
-      const xSeries = ms.xKey ? (commodityHistory?.[ms.xKey] ?? []) : [];
-      const ySeries = ms.yKey ? (allSeries?.[ms.yKey]         ?? []) : [];
-      const model   = resolveModel(src.modelKey, xSeries, ySeries);
-      const chg     = seededChanges[src.key] ?? 0;
-      const impact  = model && chg !== 0 ? estimate(model, chg) : null;
+      const ms       = MF_MODEL_SERIES[src.modelKey] ?? {};
+      const xSeries  = ms.xKey ? (allSeries?.[ms.xKey] ?? commodityHistory?.[ms.xKey] ?? []) : [];
+      const ySeriesB = ms.yKey ? (allSeries?.[ms.yKey] ?? []) : [];
+      const chg      = seededChanges[src.key] ?? 0;
+
+      // Use multivariate partial coefficient if available for this commodity factor
+      const commIdx = commVis.findIndex(f => f.key === src.key);
+      let model;
+      if (!src.isRate && mvResult && commIdx >= 0) {
+        const emp = EMPIRICAL[src.modelKey] ?? {};
+        const b   = mvResult.betas[commIdx];
+        const se  = mvResult.ses[commIdx];
+        model = {
+          beta: b, betaLow: +(b - 1.96 * se).toFixed(4), betaHigh: +(b + 1.96 * se).toFixed(4),
+          r2: mvResult.r2, n: mvResult.n,
+          destUnit: emp.destUnit ?? mfCfg.unit,
+          note: emp.note, source: emp.source,
+          isEmpirical: false, isMultivariate: true,
+        };
+      } else {
+        model = resolveModel(src.modelKey, xSeries, ySeriesB);
+      }
+
+      const impact = model && chg !== 0 ? estimate(model, chg) : null;
       return { src, model, chg, impact };
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1246,6 +1294,11 @@ export default function ImpactAnalyzer({ quotes, commodityHistory, allSeries, rs
     const vs = mfImpacts.filter(r => r.impact).map(r => Math.abs(r.impact.point));
     return vs.length ? Math.max(...vs) : 1;
   }, [mfImpacts]);
+
+  // Joint multivariate R² — same value on every mv factor row
+  const mvModel = mfImpacts.find(r => r.model?.isMultivariate)?.model;
+  const mvR2    = mvModel?.r2;
+  const mvN     = mvModel?.n;
 
   function mfLiveDefaults(sources) {
     return Object.fromEntries(sources.map(s => [s.key, mfLiveChange(s)]));
@@ -1423,6 +1476,7 @@ export default function ImpactAnalyzer({ quotes, commodityHistory, allSeries, rs
                     )}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <span style={{ fontSize: 9, color: r2Color, fontVariantNumeric: 'tabular-nums' }}>R²&thinsp;{r2 != null ? r2.toFixed(2) : '—'}</span>
+                      {model?.isMultivariate && <span style={{ fontSize: 9, color: 'rgba(99,160,255,0.6)', fontStyle: 'italic' }}>mv OLS</span>}
                       {model?.isEmpirical && <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.28)', fontStyle: 'italic' }}>empirical</span>}
                       <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.22)', fontVariantNumeric: 'tabular-nums' }}>β&thinsp;{model?.beta != null ? (model.beta > 0 ? '+' : '') + model.beta.toFixed(3) : '—'}</span>
                       {impact && <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.22)', fontVariantNumeric: 'tabular-nums' }}>95%&thinsp;CI&nbsp;{mfFmt(impact.low, mfCfg.unit)} to {mfFmt(impact.high, mfCfg.unit)}</span>}
@@ -1445,6 +1499,17 @@ export default function ImpactAnalyzer({ quotes, commodityHistory, allSeries, rs
                   <div style={{ fontSize: 32, fontWeight: 700, letterSpacing: '-0.04em', color: mfTotalColor, lineHeight: 1 }}>{mfFmt(mfTotals.point, mfCfg.unit)}</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
+                  {mvR2 != null && (
+                    <div style={{ marginBottom: 8 }}>
+                      <Tip wide text={`Joint R² of the multivariate OLS model across all ${mvN} monthly observations. This is the fraction of the target's monthly variation explained by all selected factors together. Higher is better; above 40% is meaningful for macro.`}>
+                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginBottom: 2, cursor: 'help' }}>Joint R² (mv OLS)</div>
+                        <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.03em', color: mvR2 >= 0.4 ? '#34d399' : mvR2 >= 0.2 ? '#fbbf24' : 'rgba(255,255,255,0.45)' }}>
+                          {(mvR2 * 100).toFixed(0)}%
+                          <span style={{ fontSize: 10, fontWeight: 400, color: 'rgba(255,255,255,0.3)', marginLeft: 4 }}>n={mvN}</span>
+                        </div>
+                      </Tip>
+                    </div>
+                  )}
                   <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginBottom: 3 }}>95% range</div>
                   <div style={{ fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,0.45)', fontVariantNumeric: 'tabular-nums' }}>{mfFmt(mfTotals.low, mfCfg.unit)}&ensp;–&ensp;{mfFmt(mfTotals.high, mfCfg.unit)}</div>
                 </div>

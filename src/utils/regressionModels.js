@@ -118,6 +118,7 @@ export function bivarOLS(xSeries, ySeries, lag = 0) {
  *  - Dey & Sampath (2018) — "Dynamic Linkages Between Exchange Rate and Crude Oil"
  *  - SEBI Mutual Fund correlation studies
  */
+// already exported — used by ImpactAnalyzer for multivariate model metadata
 export const EMPIRICAL = {
   crude_cpi: {
     beta: 0.045, betaLow: 0.028, betaHigh: 0.062, r2: 0.47,
@@ -274,6 +275,75 @@ export function resolveModel(modelKey, xSeries, ySeries) {
   }
 
   return { ...emp, n: computed?.n ?? 0, isEmpirical: true };
+}
+
+// ── Matrix helpers ────────────────────────────────────────────────────────────
+
+function matMul(A, B) {
+  return Array.from({ length: A.length }, (_, i) =>
+    Array.from({ length: B[0].length }, (_, j) =>
+      A[i].reduce((s, _, k) => s + A[i][k] * B[k][j], 0)
+    )
+  );
+}
+function matT(A) { return A[0].map((_, j) => A.map(r => r[j])); }
+
+function matInv(A) {
+  const n = A.length;
+  const M = A.map((row, i) => [...row, ...Array.from({ length: n }, (_, j) => +(i === j))]);
+  for (let col = 0; col < n; col++) {
+    let best = col;
+    for (let r = col + 1; r < n; r++) if (Math.abs(M[r][col]) > Math.abs(M[best][col])) best = r;
+    [M[col], M[best]] = [M[best], M[col]];
+    const p = M[col][col];
+    if (Math.abs(p) < 1e-12) return null;
+    for (let j = 0; j < 2 * n; j++) M[col][j] /= p;
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue;
+      const f = M[r][col];
+      for (let j = 0; j < 2 * n; j++) M[r][j] -= f * M[col][j];
+    }
+  }
+  return M.map(row => row.slice(n));
+}
+
+/**
+ * Multivariate OLS: Y = α + β₁X₁ + … + βₚXₚ
+ * Each βᵢ is a partial coefficient — the effect of Xᵢ holding all others constant.
+ *
+ * @param {Array<{xs: number[], y: number}>} obs
+ * @returns {{ betas, alpha, r2, ses, n }} or null
+ */
+export function multivariateOLS(obs) {
+  const n = obs.length, p = obs[0].xs.length;
+  if (n < p + 3) return null;
+
+  const X    = obs.map(o => [1, ...o.xs]);
+  const y    = obs.map(o => [o.y]);
+  const Xt   = matT(X);
+  const inv  = matInv(matMul(Xt, X));
+  if (!inv) return null;
+
+  const raw   = matMul(inv, matMul(Xt, y)).map(r => r[0]);
+  const alpha = raw[0];
+  const betas = raw.slice(1);
+
+  const yHat  = X.map(row => row.reduce((s, xj, j) => s + xj * raw[j], 0));
+  const resid = obs.map((o, i) => o.y - yHat[i]);
+  const yMean = obs.reduce((s, o) => s + o.y, 0) / n;
+  const SST   = obs.reduce((s, o) => s + (o.y - yMean) ** 2, 0);
+  const SSR   = resid.reduce((s, r) => s + r ** 2, 0);
+  const r2    = SST > 1e-10 ? Math.max(0, 1 - SSR / SST) : 0;
+  const s2    = SSR / (n - p - 1);
+  const ses   = betas.map((_, i) => Math.sqrt(Math.max(0, s2 * inv[i + 1][i + 1])));
+
+  return {
+    betas: betas.map(b => +b.toFixed(4)),
+    alpha: +alpha.toFixed(4),
+    r2:    +r2.toFixed(3),
+    ses:   ses.map(s => +s.toFixed(4)),
+    n,
+  };
 }
 
 /** Estimate the impact given a model and a source % change */

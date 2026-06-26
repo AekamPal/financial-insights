@@ -200,16 +200,15 @@ function buildDerived(q) {
     addMetric('Crude Oil', 'crude', p => `$${p.toFixed(2)}`);
   }
 
-  // Gold: MCX INR/10g preferred over COMEX conversion
+  // Gold: show COMEX USD/oz (GC=F) directly
   const goldMCX = price('goldMCX');
   const goldYF  = price('gold');
-  const goldVal = goldMCX ?? (goldYF ? goldInrTenG(goldYF, usdInr) : null);
-  const goldChg = goldMCX != null ? changePct('goldMCX') : changePct('gold');
-  if (goldVal != null) {
+  const goldChg = changePct('gold');
+  if (goldYF != null) {
     macroOverrides.push({
-      key: 'Gold (24K)', value: `₹${Math.round(goldVal).toLocaleString('en-IN')}`,
+      key: 'Gold', value: `$${Math.round(goldYF).toLocaleString('en-US')}`,
       change: goldChg != null ? `${goldChg > 0 ? '+' : ''}${goldChg.toFixed(2)}%` : '—',
-      up: goldChg != null ? goldChg >= 0 : null, sub: '/10g',
+      up: goldChg != null ? goldChg >= 0 : null, sub: 'COMEX USD/oz',
     });
   }
 
@@ -276,10 +275,9 @@ function buildDerived(q) {
     unit:   crudeMCX != null ? '₹/bbl' : 'USD/bbl',
   });
 
-  // Gold
-  const goldCVal = goldMCX ?? (goldYF ? goldInrTenG(goldYF, usdInr) : null);
-  const goldCChg = goldMCX != null ? changePct('goldMCX') : changePct('gold');
-  if (goldCVal != null) liveCommodities.push({ key: 'gold', value: Math.round(goldCVal), change: goldCChg ?? 0, unit: '₹/10g' });
+  // Gold — COMEX USD/oz
+  const goldCChg = changePct('gold');
+  if (goldYF != null) liveCommodities.push({ key: 'gold', value: +goldYF.toFixed(2), change: goldCChg ?? 0, unit: 'USD/oz' });
 
   // Silver
   const silverMCX = price('silverMCX');

@@ -108,7 +108,7 @@ let avBatchCache   = null
 let avBatchCacheTs = 0
 let avBatchPromise = null
 
-function parseAVSeries(d, limit = 48) {
+function parseAVSeries(d, limit = 120) {
   if (d?.Information || d?.Note) { console.warn('[av] rate-limited:', (d.Information ?? d.Note).slice(0, 80)); return [] }
   return (d?.data ?? []).filter(x => x.value && x.value !== '.' && !isNaN(parseFloat(x.value))).slice(0, limit).map(x => ({ month: x.date.slice(0, 7), value: parseFloat(x.value) })).reverse()
 }
@@ -134,7 +134,7 @@ async function runAVBatch() {
     }
     const indicators = {}
     for (const { fn, interval, extra } of AV_ECON_FNS) {
-      try { const d = await avGet({ function: fn, interval, ...extra }); const s = parseAVSeries(d, 72); if (s.length) { indicators[fn] = s; console.log(`[av] ${fn}: ${s.length} periods`) } } catch (e) { console.warn(`[av] ${fn}:`, e.message) }
+      try { const d = await avGet({ function: fn, interval, ...extra }); const s = parseAVSeries(d, 120); if (s.length) { indicators[fn] = s; console.log(`[av] ${fn}: ${s.length} periods`) } } catch (e) { console.warn(`[av] ${fn}:`, e.message) }
       await sleep(AV_REQ_GAP)
     }
     const result = { commodities, indicators, fetchedAt: new Date().toISOString() }

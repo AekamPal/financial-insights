@@ -184,7 +184,7 @@ let avBatchCache   = null
 let avBatchCacheTs = 0
 let avBatchPromise = null
 
-function parseAVSeries(d, limit = 48) {
+function parseAVSeries(d, limit = 120) {
   if (d?.Information || d?.Note) {
     console.warn('[av] rate-limited:', (d.Information ?? d.Note).slice(0, 80))
     return []
@@ -227,7 +227,7 @@ async function runAVBatch(apiKey) {
     for (const { fn, interval, extra } of AV_ECON_FNS) {
       try {
         const d = await avGet({ function: fn, interval, ...extra })
-        const s = parseAVSeries(d, 72)
+        const s = parseAVSeries(d, 120)
         if (s.length > 0) { indicators[fn] = s; console.log(`[av] ${fn}: ${s.length} periods`) }
         else console.warn(`[av] ${fn}: no data —`, JSON.stringify(d).slice(0, 120))
       } catch (e) { console.warn(`[av] ${fn}:`, e.message) }

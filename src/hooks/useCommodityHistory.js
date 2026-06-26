@@ -20,7 +20,7 @@ export function useCommodityHistory(disabled = false) {
     const pairs = Object.entries(COMMODITY_TICKERS);
     Promise.allSettled(
       pairs.map(([key, ticker]) =>
-        fetchHistory(ticker, '1mo', '2y').then(bars => [key, bars])
+        fetchHistory(ticker, '1mo', '10y').then(bars => [key, bars])
       )
     ).then(results => {
       const out = {};

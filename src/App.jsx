@@ -9,6 +9,7 @@ import { useCommodityHistory } from './hooks/useCommodityHistory';
 import { useFundamentals } from './hooks/useFundamentals';
 import { useGrowwPortfolio } from './hooks/useGrowwPortfolio';
 import { useNewsRss } from './hooks/useNewsRss';
+import { useRegressionHistory } from './hooks/useRegressionHistory';
 import PortfolioPanel from './components/PortfolioPanel';
 import Navbar from './components/Navbar';
 import ParallaxHero from './components/ParallaxHero';
@@ -50,6 +51,7 @@ export default function App() {
   const { data: fundamentals } = useFundamentals();
   const { data: portfolio, loading: portLoading, error: portError, refresh: refreshPortfolio } = useGrowwPortfolio();
   const { items: rssNews, loading: rssLoading, byTag: newsByTag, byCommodity: newsByCommodityRss } = useNewsRss();
+  const regressionHistory = useRegressionHistory();
 
   const refresh = useCallback(() => {
     setTick(t => t + 1);
@@ -282,7 +284,7 @@ export default function App() {
             <ImpactAnalyzer
               quotes={quotes}
               commodityHistory={commodityHistory}
-              allSeries={buildAllSeries(niftyHistory ?? nifty50, usdinr, inflation, avIndicators, avCommodities, repoRate)}
+              allSeries={buildAllSeries(niftyHistory ?? nifty50, usdinr, inflation, avIndicators, avCommodities, repoRate, regressionHistory)}
               rssNews={rssNews}
             />
           </div>
@@ -313,11 +315,14 @@ function buildMacroMetrics(derived, mock) {
   return [...overridden, ...extra];
 }
 
-function buildAllSeries(niftyHistory, usdinr, inflation, avIndicators, avCommodities, repoRateData) {
+function buildAllSeries(niftyHistory, usdinr, inflation, avIndicators, avCommodities, repoRateData, regHistory = {}) {
   const norm = s => s?.map(d => ({ month: d.month, value: d.close ?? d.value })) ?? [];
+  // Use 10Y regression history when available, fall back to shorter chart history
+  const regNifty  = regHistory?.nifty?.length  > 0 ? regHistory.nifty  : norm(niftyHistory);
+  const regUsdinr = regHistory?.usdinr?.length > 0 ? regHistory.usdinr : norm(usdinr);
   return {
-    nifty:     norm(niftyHistory),
-    usdinr:    norm(usdinr),
+    nifty:     regNifty,
+    usdinr:    regUsdinr,
     // Prefer real AV CPI YoY data; fall back to mock if AV hasn't loaded yet
     inflation: avIndicators?.CPI_YOY?.length ? avIndicators.CPI_YOY : norm(inflation),
     // AV commodity monthly series for regression (official, clean)
@@ -329,10 +334,10 @@ function buildAllSeries(niftyHistory, usdinr, inflation, avIndicators, avCommodi
     // Rate series: RBI repo (mock) + Fed Funds (AV when available)
     repoRate:  norm(repoRateData) ?? [],
     fedRate:   avIndicators?.FEDERAL_FUNDS_RATE ?? [],
-    // Sector series (empty — regression falls back to empirical)
-    niftyBank:  [],
-    niftyIT:    [],
-    niftyRealty:[],
+    // Sector indices from 10Y regression history
+    niftyBank:  regHistory?.niftyBank  ?? [],
+    niftyIT:    regHistory?.niftyIT    ?? [],
+    niftyRealty:regHistory?.niftyRealty ?? [],
   };
 }
 
