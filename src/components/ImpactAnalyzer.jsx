@@ -1303,13 +1303,14 @@ export default function ImpactAnalyzer({ quotes, commodityHistory, allSeries, rs
   const mvR2    = mvModel?.r2;
   const mvN     = mvModel?.n;
 
-  // Fallback R² for combined section: best bivariate/empirical R² among non-rate active factors
-  const nonRateImpacts  = mfImpacts.filter(r => !r.src.isRate && r.model?.r2 != null);
-  const mvR2Meaningful  = mvR2 != null && mvR2 >= 0.05;   // OLS R²<5% is noise — use empirical
-  const fallbackR2      = nonRateImpacts.length ? Math.max(...nonRateImpacts.map(r => r.model.r2)) : null;
-  const displayR2       = mvR2Meaningful ? mvR2 : fallbackR2;
-  const displayN        = mvR2Meaningful ? mvN  : (nonRateImpacts.find(r => r.model.n > 0)?.model?.n ?? 0);
-  const displayR2Label  = mvR2Meaningful ? 'Joint R² (mv OLS)' : 'R² (primary factor)';
+  // Fallback R²: read from EMPIRICAL directly (mv model overwrites r2 with near-zero computed value)
+  const nonRateSrcs    = mfImpacts.filter(r => !r.src.isRate && MF_MODEL_SERIES[r.src.modelKey]?.xKey);
+  const mvR2Meaningful = mvR2 != null && mvR2 >= 0.05;
+  const empR2s         = nonRateSrcs.map(r => EMPIRICAL[r.src.modelKey]?.r2).filter(v => v != null);
+  const fallbackR2     = empR2s.length ? Math.max(...empR2s) : null;
+  const displayR2      = mvR2Meaningful ? mvR2 : fallbackR2;
+  const displayN       = mvR2Meaningful ? mvN  : 0;
+  const displayR2Label = mvR2Meaningful ? 'Joint R² (mv OLS)' : 'R² (primary factor)';
 
   function mfLiveDefaults(sources) {
     return Object.fromEntries(sources.map(s => [s.key, mfLiveChange(s)]));
@@ -1512,13 +1513,15 @@ export default function ImpactAnalyzer({ quotes, commodityHistory, allSeries, rs
                 <div style={{ textAlign: 'right' }}>
                   {displayR2 != null && (
                     <div style={{ marginBottom: 8 }}>
-                      <Tip wide text={mvR2 != null
+                      <Tip wide text={mvR2Meaningful
                         ? `Joint R² of the multivariate OLS model across all ${displayN} monthly observations. Fraction of the target's monthly variation explained by all selected factors together. Above 40% is meaningful for macro.`
-                        : `R² of the primary factor's regression model (${displayN > 0 ? `n=${displayN}` : 'empirical'}). Fraction of the target's monthly variation explained by this factor alone.`}>
-                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginBottom: 2, cursor: 'help' }}>{displayR2Label}</div>
-                        <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.03em', color: displayR2 >= 0.4 ? '#34d399' : displayR2 >= 0.2 ? '#fbbf24' : 'rgba(255,255,255,0.45)' }}>
-                          {(displayR2 * 100).toFixed(0)}%
-                          {displayN > 0 && <span style={{ fontSize: 10, fontWeight: 400, color: 'rgba(255,255,255,0.3)', marginLeft: 4 }}>n={displayN}</span>}
+                        : `R² of the primary factor's regression model (empirical from literature). Fraction of the target's monthly variation explained by this factor alone.`}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', cursor: 'help' }}>
+                          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginBottom: 2 }}>{displayR2Label}</div>
+                          <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.03em', color: displayR2 >= 0.4 ? '#34d399' : displayR2 >= 0.2 ? '#fbbf24' : 'rgba(255,255,255,0.45)' }}>
+                            {(displayR2 * 100).toFixed(0)}%
+                            {displayN > 0 && <span style={{ fontSize: 10, fontWeight: 400, color: 'rgba(255,255,255,0.3)', marginLeft: 4 }}>n={displayN}</span>}
+                          </div>
                         </div>
                       </Tip>
                     </div>
