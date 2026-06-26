@@ -1233,8 +1233,11 @@ export default function ImpactAnalyzer({ quotes, commodityHistory, allSeries, rs
     const ySeries = yKey ? (allSeries?.[yKey] ?? []) : [];
     const yMap    = momPct(ySeries);
 
-    // Per-commodity-factor MoM% maps (allSeries = AV official data preferred; fallback to Yahoo Finance)
-    const xSer = key => allSeries?.[key] ?? commodityHistory?.[key] ?? [];
+    // Per-commodity-factor MoM% maps (AV preferred; fallback to Yahoo Finance if AV empty)
+    const xSer = key => {
+      const av = allSeries?.[key];
+      return av?.length ? av : (commodityHistory?.[key] ?? []);
+    };
     const factorMaps = commVis.map(src => ({
       src,
       xMap: momPct(xSer(MF_MODEL_SERIES[src.modelKey].xKey)),
@@ -1253,7 +1256,7 @@ export default function ImpactAnalyzer({ quotes, commodityHistory, allSeries, rs
 
     return mfVisible.map(src => {
       const ms       = MF_MODEL_SERIES[src.modelKey] ?? {};
-      const xSeries  = ms.xKey ? (allSeries?.[ms.xKey] ?? commodityHistory?.[ms.xKey] ?? []) : [];
+      const xSeries  = ms.xKey ? (() => { const av = allSeries?.[ms.xKey]; return av?.length ? av : (commodityHistory?.[ms.xKey] ?? []); })() : [];
       const ySeriesB = ms.yKey ? (allSeries?.[ms.yKey] ?? []) : [];
       const chg      = seededChanges[src.key] ?? 0;
 
