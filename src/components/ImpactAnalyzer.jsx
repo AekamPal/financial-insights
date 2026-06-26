@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { TrendingUp, TrendingDown, Activity, Info, ChevronDown, ChevronUp, Minus, ExternalLink, Sliders, RotateCcw } from 'lucide-react';
-import { resolveModel, estimate, multivariateOLS, momPct, EMPIRICAL } from '../utils/regressionModels';
+import { resolveModel, estimate, multivariateOLS, yoyPct, EMPIRICAL } from '../utils/regressionModels';
 
 // ── Tooltip ───────────────────────────────────────────────────────────────────
 
@@ -1231,7 +1231,7 @@ export default function ImpactAnalyzer({ quotes, commodityHistory, allSeries, rs
     // Target MoM% map (all commodity factors share the same yKey)
     const yKey    = MF_MODEL_SERIES[commVis[0]?.modelKey]?.yKey;
     const ySeries = yKey ? (allSeries?.[yKey] ?? []) : [];
-    const yMap    = momPct(ySeries);
+    const yMap    = yoyPct(ySeries);
 
     // Per-commodity-factor MoM% maps (AV preferred; fallback to Yahoo Finance if AV empty)
     const xSer = key => {
@@ -1240,7 +1240,7 @@ export default function ImpactAnalyzer({ quotes, commodityHistory, allSeries, rs
     };
     const factorMaps = commVis.map(src => ({
       src,
-      xMap: momPct(xSer(MF_MODEL_SERIES[src.modelKey].xKey)),
+      xMap: yoyPct(xSer(MF_MODEL_SERIES[src.modelKey].xKey)),
     }));
 
     // Run multivariate OLS when 2+ commodity factors are visible
@@ -1275,7 +1275,7 @@ export default function ImpactAnalyzer({ quotes, commodityHistory, allSeries, rs
           isEmpirical: false, isMultivariate: true,
         };
       } else {
-        model = resolveModel(src.modelKey, xSeries, ySeriesB);
+        model = resolveModel(src.modelKey, xSeries, ySeriesB, yoyPct);
       }
 
       const impact = model && chg !== 0 ? estimate(model, chg) : null;
@@ -1513,7 +1513,7 @@ export default function ImpactAnalyzer({ quotes, commodityHistory, allSeries, rs
                   {displayR2 != null && (
                     <div style={{ marginBottom: 8 }}>
                       <Tip wide text={mvR2 != null
-                        ? `Joint R² of the multivariate OLS across all ${displayN} monthly observations. Fraction of the target's monthly variation explained by all selected commodity factors together. Monthly MoM% regressions are noisy — low R² is common even for meaningful macro relationships.`
+                        ? `Joint R² of the multivariate YoY OLS across all ${displayN} annual observations. Fraction of the target's year-over-year variation explained by all selected commodity factors together.`
                         : `R² of the primary factor's regression model (empirical from literature). Fraction of the target's monthly variation explained by this factor alone.`}>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', cursor: 'help' }}>
                           <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginBottom: 2 }}>{displayR2Label}</div>

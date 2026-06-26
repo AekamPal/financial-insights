@@ -42,6 +42,20 @@ export function momPct(series) {
   return out;
 }
 
+/** Convert a monthly series to YoY % changes (same month, prior year), keyed by month */
+export function yoyPct(series) {
+  const out = {};
+  if (!series?.length) return out;
+  for (let i = 12; i < series.length; i++) {
+    const prev = val(series[i - 12]);
+    const curr = val(series[i]);
+    if (prev != null && curr != null && prev !== 0) {
+      out[series[i].month] = (curr - prev) / prev * 100;
+    }
+  }
+  return out;
+}
+
 /** Align X changes with Y changes, applying a month lag to Y */
 export function alignPairs(xMap, yMap, lagMonths = 0) {
   const pairs = [];
@@ -97,10 +111,10 @@ export function ols(pairs) {
  * @param {Array} ySeries  Destination monthly series
  * @param {number} lag     Months by which Y lags X (e.g. 1 for crude→CPI)
  */
-export function bivarOLS(xSeries, ySeries, lag = 0) {
+export function bivarOLS(xSeries, ySeries, lag = 0, transform = yoyPct) {
   if (!xSeries?.length || !ySeries?.length) return null;
-  const xMap = momPct(xSeries);
-  const yMap = momPct(ySeries);
+  const xMap = transform(xSeries);
+  const yMap = transform(ySeries);
   const pairs = alignPairs(xMap, yMap, lag);
   return ols(pairs);
 }
@@ -254,13 +268,13 @@ const MIN_N  = 10;     // minimum months of paired data required
  * Try OLS from app series; fall back to empirical benchmark.
  * Returns an object with: beta, betaLow, betaHigh, r2, n, lag, source, destUnit, note, isEmpirical
  */
-export function resolveModel(modelKey, xSeries, ySeries) {
+export function resolveModel(modelKey, xSeries, ySeries, transform = yoyPct) {
   const emp = EMPIRICAL[modelKey];
   if (!emp) return null;
 
   if (emp.skipOLS) return { ...emp, n: emp.n ?? 0, isEmpirical: true };
 
-  const computed = bivarOLS(xSeries, ySeries, emp.lag);
+  const computed = bivarOLS(xSeries, ySeries, emp.lag, transform);
   const useComputed = computed && computed.r2 >= MIN_R2 && computed.n >= MIN_N;
 
   if (useComputed) {
