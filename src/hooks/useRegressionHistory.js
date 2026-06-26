@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { fetchHistory, TICKERS } from '../api/yahooFinance';
 
-// 10-year monthly series for regression only (not chart display).
+// Max-range monthly series for regression only (not chart display).
 // Cached in localStorage for 24h so it doesn't re-fetch on every page load.
-const CACHE_KEY = 'regressionHistory_v1';
+const CACHE_KEY = 'regressionHistory_v2';
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
 const REGRESSION_PAIRS = [
@@ -45,7 +45,7 @@ export function useRegressionHistory() {
     }
     Promise.allSettled(
       REGRESSION_PAIRS.map(([key, ticker]) =>
-        fetchHistory(ticker, '1mo', '10y').then(bars => [key, normSeries(bars)])
+        fetchHistory(ticker, '1mo', 'max').then(bars => [key, normSeries(bars)])
       )
     ).then(results => {
       const out = {};
@@ -62,5 +62,5 @@ export function useRegressionHistory() {
     });
   }, []);
 
-  return data; // { nifty, usdinr, niftyBank, niftyIT, niftyRealty } — up to 120 monthly points each
+  return data; // { nifty, usdinr, niftyBank, niftyIT, niftyRealty } — max available monthly points
 }

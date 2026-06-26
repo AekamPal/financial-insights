@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { fetchHistory, TICKERS } from '../api/yahooFinance';
 
-// Use COMEX/CME tickers for all commodities — these have 10Y history on Yahoo Finance.
+// Use COMEX/CME tickers for all commodities — max range for 20Y+ history.
 // MCX tickers (GOLDM.MCX, SILVER.MCX) only have 2-3Y history and would break OLS fallback.
 // Live prices from GoldAPI/Kite/CPA override the chart value regardless of history source.
 const COMMODITY_TICKERS = {
-  gold:   TICKERS.gold,    // GC=F — COMEX USD/oz (10Y+ history)
-  silver: TICKERS.silver,  // SI=F — COMEX USD/oz (10Y+ history)
+  gold:   TICKERS.gold,    // GC=F — COMEX USD/oz (20Y+ history)
+  silver: TICKERS.silver,  // SI=F — COMEX USD/oz (20Y+ history)
   crude:  TICKERS.crude,   // BZ=F — USD/bbl
   natgas: TICKERS.natgas,  // NG=F — USD/MMBtu
   copper: TICKERS.copper,  // HG=F — USD/lb
@@ -20,7 +20,7 @@ export function useCommodityHistory(disabled = false) {
     const pairs = Object.entries(COMMODITY_TICKERS);
     Promise.allSettled(
       pairs.map(([key, ticker]) =>
-        fetchHistory(ticker, '1mo', '10y').then(bars => [key, bars])
+        fetchHistory(ticker, '1mo', 'max').then(bars => [key, bars])
       )
     ).then(results => {
       const out = {};
