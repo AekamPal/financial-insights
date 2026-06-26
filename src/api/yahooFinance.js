@@ -104,12 +104,60 @@ export async function fetchHistory(symbol, interval = '1mo', range = '2y') {
   }).filter(d => d.close !== null);
 }
 
-// Batch-fetch multiple quotes in parallel
-export async function fetchQuotes(symbols) {
-  const results = await Promise.allSettled(
-    symbols.map(([key, sym]) => fetchQuote(sym).then(q => [key, q]))
-  );
-  return Object.fromEntries(
-    results.filter(r => r.status === 'fulfilled').map(r => r.value)
-  );
+// Module-level cache — returned on YF failure so UI never goes blank
+let _lastGoodQuotes = {};
+
+// Batch-fetch all quotes in ONE request to avoid per-symbol rate limits
+export async function fetchQuotes(pairs) {
+  const tickers = pairs.map(([, sym]) => sym).join(',');
+  const fields  = 'regularMarketPrice,regularMarketPreviousClose,regularMarketChange,regularMarketChangePercent,currency,regularMarketTime';
+  const qs      = `?symbols=${encodeURIComponent(tickers)}&fields=${fields}&crumb=`;
+
+  // Try batch endpoint — 1 request instead of N
+  for (const base of ['/yf/v7/finance/quote', 'https://query1.finance.yahoo.com/v7/finance/quote', 'https://query2.finance.yahoo.com/v7/finance/quote']) {
+    try {
+      const r    = await fetch(base + qs, { signal: AbortSignal.timeout(8000) });
+      if (!r.ok) continue;
+      const json = await r.json();
+      const list = json?.quoteResponse?.result;
+      if (!list?.length) continue;
+
+      const bySymbol = Object.fromEntries(list.map(q => [q.symbol, q]));
+      const out = {};
+      for (const [key, sym] of pairs) {
+        const q = bySymbol[sym];
+        if (!q) continue;
+        const price     = q.regularMarketPrice;
+        const prevClose = q.regularMarketPreviousClose ?? price;
+        out[key] = {
+          price,
+          prevClose,
+          change:    +(price - prevClose).toFixed(2),
+          changePct: +((((price - prevClose) / prevClose) * 100) || q.regularMarketChangePercent || 0).toFixed(2),
+          currency:  q.currency,
+          marketTime: q.regularMarketTime ?? null,
+          symbol:    sym,
+        };
+      }
+
+      if (Object.keys(out).length > 0) {
+        _lastGoodQuotes = { ..._lastGoodQuotes, ...out };
+        return out;
+      }
+    } catch { /* try next */ }
+  }
+
+  // Batch failed — fall back to individual chart requests for critical symbols only
+  const critical  = pairs.filter(([k]) => ['nifty', 'sensex', 'usdinr', 'crude', 'gold'].includes(k));
+  const results   = await Promise.allSettled(critical.map(([key, sym]) => fetchQuote(sym).then(q => [key, q])));
+  const fallback  = Object.fromEntries(results.filter(r => r.status === 'fulfilled').map(r => r.value));
+
+  if (Object.keys(fallback).length > 0) {
+    _lastGoodQuotes = { ..._lastGoodQuotes, ...fallback };
+    return { ..._lastGoodQuotes, ...fallback };
+  }
+
+  // Everything failed — return last known good so UI doesn't go blank
+  console.warn('[yf] all fetches failed, returning cached quotes');
+  return _lastGoodQuotes;
 }
