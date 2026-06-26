@@ -1309,7 +1309,7 @@ export default function ImpactAnalyzer({ quotes, commodityHistory, allSeries, rs
   const fallbackR2  = empR2s.length ? Math.max(...empR2s) : null;
   const displayR2      = mvR2 != null ? mvR2 : fallbackR2;
   const displayN       = mvR2 != null ? mvN  : 0;
-  const displayR2Label = mvR2 != null ? 'Joint R² (mv OLS)' : 'R² (primary factor)';
+  const displayR2Label = mvR2 != null ? 'Joint R² (commodities, mv OLS)' : 'R² (primary factor)';
 
   function mfLiveDefaults(sources) {
     return Object.fromEntries(sources.map(s => [s.key, mfLiveChange(s)]));
@@ -1486,9 +1486,10 @@ export default function ImpactAnalyzer({ quotes, commodityHistory, allSeries, rs
                       </div>
                     )}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 9, color: r2Color, fontVariantNumeric: 'tabular-nums' }}>R²&thinsp;{r2 != null ? r2.toFixed(2) : '—'}</span>
+                      {/* Rate factors use empirical betas excluded from mv OLS — hide R² to avoid confusion */}
+                      {!src.isRate && <span style={{ fontSize: 9, color: r2Color, fontVariantNumeric: 'tabular-nums' }}>R²&thinsp;{r2 != null ? r2.toFixed(2) : '—'}</span>}
                       {model?.isMultivariate && <span style={{ fontSize: 9, color: 'rgba(99,160,255,0.6)', fontStyle: 'italic' }}>mv OLS</span>}
-                      {model?.isEmpirical && <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.28)', fontStyle: 'italic' }}>empirical</span>}
+                      {model?.isEmpirical && <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.28)', fontStyle: 'italic' }}>{src.isRate ? 'empirical β' : 'empirical'}</span>}
                       <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.22)', fontVariantNumeric: 'tabular-nums' }}>β&thinsp;{model?.beta != null ? (model.beta > 0 ? '+' : '') + model.beta.toFixed(3) : '—'}</span>
                       {impact && <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.22)', fontVariantNumeric: 'tabular-nums' }}>95%&thinsp;CI&nbsp;{mfFmt(impact.low, mfCfg.unit)} to {mfFmt(impact.high, mfCfg.unit)}</span>}
                       {model?.n > 0 && <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.18)' }}>n={model.n}</span>}
