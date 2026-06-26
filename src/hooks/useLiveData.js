@@ -300,5 +300,5 @@ function buildDerived(q) {
   const cuChg     = copperMCX != null ? changePct('copperMCX') : changePct('copper');
   if (cuVal != null) liveCommodities.push({ key: 'copper', value: +cuVal.toFixed(1), change: cuChg ?? 0, unit: '₹/kg' });
 
-  return { macroOverrides, liveMovers, liveSectors, liveCommodities, usdInr, goldInr: goldCVal };
+  return { macroOverrides, liveMovers, liveSectors, liveCommodities, usdInr };
 }
