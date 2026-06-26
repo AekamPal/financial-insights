@@ -22,7 +22,7 @@
 const val = d => d?.close ?? d?.value ?? null;
 
 /** Month string arithmetic: '2024-01' + 2 months → '2024-03' */
-function shiftMonth(monthStr, n) {
+export function shiftMonth(monthStr, n) {
   const [y, m] = monthStr.split('-').map(Number);
   const d = new Date(y, m - 1 + n, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -148,7 +148,7 @@ export const EMPIRICAL = {
   },
   crude_nifty: {
     beta: -0.152, betaLow: -0.210, betaHigh: -0.090, r2: 0.28,
-    lag: 0, destUnit: '%',
+    lag: 2, destUnit: '%',
     note: 'Moderate negative. High-oil episodes coincide with global risk-off. Energy cost acts as a margin tax on corporate India.',
     source: 'Mohanty & Nanda 2019, NSE Research 2023',
   },

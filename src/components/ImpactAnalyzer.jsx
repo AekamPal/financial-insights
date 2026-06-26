@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { TrendingUp, TrendingDown, Activity, Info, ChevronDown, ChevronUp, Minus, ExternalLink, Sliders, RotateCcw } from 'lucide-react';
-import { resolveModel, estimate, multivariateOLS, yoyPct, EMPIRICAL } from '../utils/regressionModels';
+import { resolveModel, estimate, multivariateOLS, yoyPct, shiftMonth, EMPIRICAL } from '../utils/regressionModels';
 
 // ── Tooltip ───────────────────────────────────────────────────────────────────
 
@@ -1233,23 +1233,33 @@ export default function ImpactAnalyzer({ quotes, commodityHistory, allSeries, rs
     const ySeries = yKey ? (allSeries?.[yKey] ?? []) : [];
     const yMap    = yoyPct(ySeries);
 
-    // Per-commodity-factor MoM% maps (AV preferred; fallback to Yahoo Finance if AV empty)
+    // Per-commodity-factor YoY% maps, lag-shifted so xMap[t] = x_yoy[t - lag]
+    // This lets crude (lag=2) pair with nifty 2 months later in the same OLS matrix.
     const xSer = key => {
       const av = allSeries?.[key];
       return av?.length ? av : (commodityHistory?.[key] ?? []);
     };
-    const factorMaps = commVis.map(src => ({
-      src,
-      xMap: yoyPct(xSer(MF_MODEL_SERIES[src.modelKey].xKey)),
-    }));
+    const factorMaps = commVis.map(src => {
+      const lag = EMPIRICAL[src.modelKey]?.lag ?? 0;
+      const rawXMap = yoyPct(xSer(MF_MODEL_SERIES[src.modelKey].xKey));
+      if (lag === 0) return { src, xMap: rawXMap };
+      const xMap = {};
+      for (const [m, v] of Object.entries(rawXMap)) xMap[shiftMonth(m, lag)] = v;
+      return { src, xMap };
+    });
 
-    // Run multivariate OLS when 2+ commodity factors are visible
+    // USD/INR added as a hidden control variable for equity targets (captures FII flow channel)
+    const equityYKeys = new Set(['nifty', 'niftyBank', 'niftyIT', 'niftyRealty', 'niftyMetal', 'niftyCapGoods', 'niftyFert']);
+    const usdinrCtrl  = yKey && equityYKeys.has(yKey) ? { key: 'usdinr', xMap: yoyPct(allSeries?.usdinr ?? []) } : null;
+    const allMvFactors = usdinrCtrl ? [...factorMaps, usdinrCtrl] : factorMaps;
+
+    // Run multivariate OLS: commodity factors + USD/INR control for equity targets
     let mvResult = null;
-    if (commVis.length >= 2) {
-      const commonMonths = Object.keys(yMap).filter(m => factorMaps.every(fm => fm.xMap[m] != null));
-      if (commonMonths.length >= commVis.length + 3) {
+    if (allMvFactors.length >= 2) {
+      const commonMonths = Object.keys(yMap).filter(m => allMvFactors.every(fm => fm.xMap[m] != null));
+      if (commonMonths.length >= allMvFactors.length + 3) {
         mvResult = multivariateOLS(
-          commonMonths.map(m => ({ xs: factorMaps.map(fm => fm.xMap[m]), y: yMap[m] }))
+          commonMonths.map(m => ({ xs: allMvFactors.map(fm => fm.xMap[m]), y: yMap[m] }))
         );
       }
     }
@@ -1514,7 +1524,7 @@ export default function ImpactAnalyzer({ quotes, commodityHistory, allSeries, rs
                   {displayR2 != null && (
                     <div style={{ marginBottom: 8 }}>
                       <Tip wide text={mvR2 != null
-                        ? `Joint R² of the multivariate YoY OLS across all ${displayN} annual observations. Fraction of the target's year-over-year variation explained by all selected commodity factors together.`
+                        ? `Joint R² of the multivariate YoY OLS (commodity factors + USD/INR control) across ${displayN} annual observations. Crude is lag-shifted 2 months to capture the OMC→CPI→earnings transmission delay.`
                         : `R² of the primary factor's regression model (empirical from literature). Fraction of the target's monthly variation explained by this factor alone.`}>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', cursor: 'help' }}>
                           <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginBottom: 2 }}>{displayR2Label}</div>
