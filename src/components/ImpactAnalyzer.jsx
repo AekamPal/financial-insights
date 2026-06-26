@@ -1303,11 +1303,13 @@ export default function ImpactAnalyzer({ quotes, commodityHistory, allSeries, rs
   const mvR2    = mvModel?.r2;
   const mvN     = mvModel?.n;
 
-  // Fallback R² for combined section: best bivariate R² among non-rate active factors
-  const nonRateImpacts = mfImpacts.filter(r => !r.src.isRate && r.model?.r2 != null);
-  const displayR2      = mvR2 ?? (nonRateImpacts.length ? Math.max(...nonRateImpacts.map(r => r.model.r2)) : null);
-  const displayN       = mvN  ?? (nonRateImpacts.length ? nonRateImpacts.find(r => r.model.n > 0)?.model?.n ?? 0 : 0);
-  const displayR2Label = mvR2 != null ? 'Joint R² (mv OLS)' : 'R² (primary factor)';
+  // Fallback R² for combined section: best bivariate/empirical R² among non-rate active factors
+  const nonRateImpacts  = mfImpacts.filter(r => !r.src.isRate && r.model?.r2 != null);
+  const mvR2Meaningful  = mvR2 != null && mvR2 >= 0.05;   // OLS R²<5% is noise — use empirical
+  const fallbackR2      = nonRateImpacts.length ? Math.max(...nonRateImpacts.map(r => r.model.r2)) : null;
+  const displayR2       = mvR2Meaningful ? mvR2 : fallbackR2;
+  const displayN        = mvR2Meaningful ? mvN  : (nonRateImpacts.find(r => r.model.n > 0)?.model?.n ?? 0);
+  const displayR2Label  = mvR2Meaningful ? 'Joint R² (mv OLS)' : 'R² (primary factor)';
 
   function mfLiveDefaults(sources) {
     return Object.fromEntries(sources.map(s => [s.key, mfLiveChange(s)]));
