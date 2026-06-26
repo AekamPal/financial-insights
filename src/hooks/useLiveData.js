@@ -221,12 +221,6 @@ function buildDerived(q) {
       change: cp != null ? `${cp > 0 ? '+' : ''}${cp.toFixed(2)}%` : '—',
       up: cp != null ? cp <= 0 : null,
     });
-    const inrCp = cp != null ? +(-cp).toFixed(3) : null;
-    macroOverrides.push({
-      key: 'INR/USD', value: `$${(1 / rat).toFixed(5)}`,
-      change: inrCp != null ? `${inrCp > 0 ? '+' : ''}${inrCp.toFixed(2)}%` : '—',
-      up: inrCp != null ? inrCp >= 0 : null,
-    });
   }
 
   // Top NSE movers
