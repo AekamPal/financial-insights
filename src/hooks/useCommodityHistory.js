@@ -1,15 +1,15 @@
 import { useState, useEffect } from 'react';
 import { fetchHistory, TICKERS } from '../api/yahooFinance';
 
-// MCX commodity history uses Yahoo Finance (avoids Kite contract-rollover complexity
-// for 2-year historical series). GOLDM.MCX / SILVER.MCX give India domestic INR prices.
-// Brent/NG/copper from COMEX/CME — used for the chart shape; live price from Kite overrides.
+// Use COMEX/CME tickers for all commodities — these have 10Y history on Yahoo Finance.
+// MCX tickers (GOLDM.MCX, SILVER.MCX) only have 2-3Y history and would break OLS fallback.
+// Live prices from GoldAPI/Kite/CPA override the chart value regardless of history source.
 const COMMODITY_TICKERS = {
-  gold:   TICKERS.goldMCX,    // GOLDM.MCX — INR/10g
-  silver: TICKERS.silverMCX,  // SILVER.MCX — INR/kg
-  crude:  TICKERS.crude,       // BZ=F — USD/bbl
-  natgas: TICKERS.natgas,      // NG=F — USD/MMBtu
-  copper: TICKERS.copper,      // HG=F — USD/lb
+  gold:   TICKERS.gold,    // GC=F — COMEX USD/oz (10Y+ history)
+  silver: TICKERS.silver,  // SI=F — COMEX USD/oz (10Y+ history)
+  crude:  TICKERS.crude,   // BZ=F — USD/bbl
+  natgas: TICKERS.natgas,  // NG=F — USD/MMBtu
+  copper: TICKERS.copper,  // HG=F — USD/lb
 };
 
 export function useCommodityHistory(disabled = false) {
