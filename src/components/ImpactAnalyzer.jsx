@@ -1303,14 +1303,13 @@ export default function ImpactAnalyzer({ quotes, commodityHistory, allSeries, rs
   const mvR2    = mvModel?.r2;
   const mvN     = mvModel?.n;
 
-  // Fallback R²: read from EMPIRICAL directly (mv model overwrites r2 with near-zero computed value)
-  const nonRateSrcs    = mfImpacts.filter(r => !r.src.isRate && MF_MODEL_SERIES[r.src.modelKey]?.xKey);
-  const mvR2Meaningful = mvR2 != null && mvR2 >= 0.05;
-  const empR2s         = nonRateSrcs.map(r => EMPIRICAL[r.src.modelKey]?.r2).filter(v => v != null);
-  const fallbackR2     = empR2s.length ? Math.max(...empR2s) : null;
-  const displayR2      = mvR2Meaningful ? mvR2 : fallbackR2;
-  const displayN       = mvR2Meaningful ? mvN  : 0;
-  const displayR2Label = mvR2Meaningful ? 'Joint R² (mv OLS)' : 'R² (primary factor)';
+  // Show real multivariate R² when OLS ran; fall back to empirical only when OLS had no data
+  const nonRateSrcs = mfImpacts.filter(r => !r.src.isRate && MF_MODEL_SERIES[r.src.modelKey]?.xKey);
+  const empR2s      = nonRateSrcs.map(r => EMPIRICAL[r.src.modelKey]?.r2).filter(v => v != null);
+  const fallbackR2  = empR2s.length ? Math.max(...empR2s) : null;
+  const displayR2      = mvR2 != null ? mvR2 : fallbackR2;
+  const displayN       = mvR2 != null ? mvN  : 0;
+  const displayR2Label = mvR2 != null ? 'Joint R² (mv OLS)' : 'R² (primary factor)';
 
   function mfLiveDefaults(sources) {
     return Object.fromEntries(sources.map(s => [s.key, mfLiveChange(s)]));
@@ -1513,8 +1512,8 @@ export default function ImpactAnalyzer({ quotes, commodityHistory, allSeries, rs
                 <div style={{ textAlign: 'right' }}>
                   {displayR2 != null && (
                     <div style={{ marginBottom: 8 }}>
-                      <Tip wide text={mvR2Meaningful
-                        ? `Joint R² of the multivariate OLS model across all ${displayN} monthly observations. Fraction of the target's monthly variation explained by all selected factors together. Above 40% is meaningful for macro.`
+                      <Tip wide text={mvR2 != null
+                        ? `Joint R² of the multivariate OLS across all ${displayN} monthly observations. Fraction of the target's monthly variation explained by all selected commodity factors together. Monthly MoM% regressions are noisy — low R² is common even for meaningful macro relationships.`
                         : `R² of the primary factor's regression model (empirical from literature). Fraction of the target's monthly variation explained by this factor alone.`}>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', cursor: 'help' }}>
                           <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginBottom: 2 }}>{displayR2Label}</div>
