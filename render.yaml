@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: financial-insights
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: node server.js
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: ALPHAVANTAGE_API_KEY
+        sync: false
+      - key: GOLDAPI_KEY
+        sync: false
+      - key: COMMODITY_PRICE_API_KEY
+        sync: false
+      - key: KITE_API_KEY
+        sync: false
+      - key: KITE_ACCESS_TOKEN
+        sync: false
+      - key: GROWW_API_KEY
+        sync: false
+      - key: GROWW_SECRET
+        sync: false
