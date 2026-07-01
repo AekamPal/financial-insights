@@ -1041,11 +1041,51 @@ function kitePlugin(env) {
   }
 }
 
+// ── FRED + Repo Rate dev plugin ────────────────────────────────────────────────
+function macroDataPlugin(env) {
+  const FRED_KEY = env.FRED_API_KEY ?? ''
+  const fredConfigured = !!(FRED_KEY && FRED_KEY !== 'YOUR_FRED_API_KEY')
+  return {
+    name: 'macro-data',
+    configureServer(server) {
+      server.middlewares.use('/fred', async (req, res) => {
+        const hdrs = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+        if (!fredConfigured) {
+          res.writeHead(503, hdrs); res.end(JSON.stringify({ error: 'FRED_API_KEY not configured' })); return
+        }
+        const url = new URL(req.url ?? '/', 'http://localhost')
+        const series = url.searchParams.get('series') ?? 'INDCPIALLMINMEI'
+        const units  = url.searchParams.get('units')  ?? 'pc1'
+        const limit  = url.searchParams.get('limit')  ?? '24'
+        try {
+          const fredUrl = new URL('https://api.stlouisfed.org/fred/series/observations')
+          fredUrl.searchParams.set('series_id', series)
+          fredUrl.searchParams.set('api_key', FRED_KEY)
+          fredUrl.searchParams.set('file_type', 'json')
+          fredUrl.searchParams.set('units', units)
+          fredUrl.searchParams.set('sort_order', 'desc')
+          fredUrl.searchParams.set('limit', limit)
+          const r = await fetch(fredUrl.toString(), { signal: AbortSignal.timeout(10_000) })
+          const d = await r.json()
+          res.writeHead(r.ok ? 200 : r.status, hdrs); res.end(JSON.stringify(d))
+        } catch (e) {
+          res.writeHead(500, hdrs); res.end(JSON.stringify({ error: e.message }))
+        }
+      })
+      server.middlewares.use('/repo-rate', (_req, res) => {
+        const rate = parseFloat(env.REPO_RATE_PCT ?? '6.0')
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' })
+        res.end(JSON.stringify({ rate }))
+      })
+    },
+  }
+}
+
 // ── Vite config ───────────────────────────────────────────────────────────────
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   return {
-    plugins: [react(), growwPlugin(env), alphaVantagePlugin(env), cpaPricePlugin(env), goldApiPlugin(env), nsePlugin(), rssPlugin(), instrumentsPlugin(), yfFundamentalsPlugin(), pyFundamentalsPlugin(), kitePlugin(env)],
+    plugins: [react(), growwPlugin(env), alphaVantagePlugin(env), cpaPricePlugin(env), goldApiPlugin(env), nsePlugin(), rssPlugin(), instrumentsPlugin(), yfFundamentalsPlugin(), pyFundamentalsPlugin(), kitePlugin(env), macroDataPlugin(env)],
     server: {
       proxy: {
         '/yf': {

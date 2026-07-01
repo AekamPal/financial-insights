@@ -608,6 +608,40 @@ app.use('/yf', async (req, res) => {
   }
 })
 
+// ── FRED (Federal Reserve Economic Data) proxy ────────────────────────────────
+// Free API key at https://fred.stlouisfed.org/docs/api/api_key.html
+// Set FRED_API_KEY in .env. Used for India CPI YoY (INDCPIALLMINMEI).
+app.get('/fred', async (req, res) => {
+  const apiKey = process.env.FRED_API_KEY
+  if (!apiKey || apiKey === 'YOUR_FRED_API_KEY') {
+    return res.status(503).json({ error: 'FRED_API_KEY not configured' })
+  }
+  const { series = 'INDCPIALLMINMEI', units = 'pc1', limit = '24' } = req.query
+  try {
+    const url = new URL('https://api.stlouisfed.org/fred/series/observations')
+    url.searchParams.set('series_id', series)
+    url.searchParams.set('api_key', apiKey)
+    url.searchParams.set('file_type', 'json')
+    url.searchParams.set('units', units)
+    url.searchParams.set('sort_order', 'desc')
+    url.searchParams.set('limit', String(limit))
+    const r = await fetch(url.toString(), { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(10_000) })
+    const d = await r.json()
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.status(r.ok ? 200 : r.status).json(d)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// ── RBI Repo Rate ──────────────────────────────────────────────────────────────
+// Set REPO_RATE_PCT in .env (e.g. 6.0). Updated manually ~6× per year after MPC.
+app.get('/repo-rate', (req, res) => {
+  const rate = parseFloat(process.env.REPO_RATE_PCT ?? '6.0')
+  res.json({ rate })
+})
+
 // ── Serve Vite build ──────────────────────────────────────────────────────────
 app.use(express.static(join(__dirname, 'dist')))
 app.get('*', (req, res) => res.sendFile(join(__dirname, 'dist', 'index.html')))

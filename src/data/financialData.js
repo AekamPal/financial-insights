@@ -71,8 +71,6 @@ export const gdpGrowth = [
   { month: '2024-04', value: 6.7 }, { month: '2024-07', value: 6.5 },
 ];
 
-// FII flows (₹ Crore, monthly net)
-export const fiiFlow = genSeries(8000, 18000, MONTHS, 0);
 
 // Sectoral indices
 export const sectors = [
@@ -105,9 +103,8 @@ export const macroMetrics = [
   { label: 'Crude Oil',  value: '$82.40',  change: '-1.12%', up: false, sub: 'Brent USD/bbl' },
   { label: 'Gold',       value: '₹72,450', change: '+0.33%', up: true,  sub: 'MCX INR/10g' },
   { label: 'USD/INR',    value: '83.67',   change: '+0.12%', up: false, sub: 'Forex' },
-  { label: 'Repo Rate',  value: '6.50%',   change: '0.00%',  up: null,  sub: 'RBI Policy' },
-  { label: 'CPI Infl.',  value: '4.83%',   change: '-0.21%', up: true,  sub: 'YoY May 2025' },
-  { label: 'FII Flows',  value: '+₹4,280Cr',change: 'Net Buy',up: true, sub: 'Month to Date' },
+  { label: 'Repo Rate',  value: '6.00%',   change: '0.00%',  up: null,  sub: 'RBI Policy' },
+  { label: 'CPI Infl.',  value: '4.83%',   change: '-0.21%', up: true,  sub: 'YoY (FRED)' },
 ];
 
 // Commodity basket

@@ -10,6 +10,7 @@ import { useFundamentals } from './hooks/useFundamentals';
 import { useGrowwPortfolio } from './hooks/useGrowwPortfolio';
 import { useNewsRss } from './hooks/useNewsRss';
 import { useRegressionHistory } from './hooks/useRegressionHistory';
+import { useFREDData } from './hooks/useFREDData';
 import PortfolioPanel from './components/PortfolioPanel';
 import Navbar from './components/Navbar';
 import ParallaxHero from './components/ParallaxHero';
@@ -30,7 +31,7 @@ import InstrumentSearch from './components/InstrumentSearch';
 
 import {
   macroMetrics as mockMacroMetrics, nifty50, sensex, commodities as mockCommodities, sectors as mockSectors,
-  topMovers as mockMovers, inflation, repoRate, usdinr, fiiFlow, gold,
+  topMovers as mockMovers, inflation, repoRate, usdinr, gold,
 } from './data/financialData';
 
 // ── DEV TOGGLE: empty out mock/Yahoo fallbacks to verify AV-only data ─────────
@@ -52,6 +53,7 @@ export default function App() {
   const { data: portfolio, loading: portLoading, error: portError, refresh: refreshPortfolio } = useGrowwPortfolio();
   const { items: rssNews, loading: rssLoading, byTag: newsByTag, byCommodity: newsByCommodityRss } = useNewsRss();
   const regressionHistory = useRegressionHistory();
+  const { cpiYoY, repoRate: liveRepoRate } = useFREDData();
 
   const refresh = useCallback(() => {
     setTick(t => t + 1);
@@ -60,7 +62,25 @@ export default function App() {
   }, [refreshLive, refreshPortfolio]);
 
   // Merge live data over mock data
-  const macroMetrics = derived ? buildMacroMetrics(derived, DISABLE_MOCK_DATA ? [] : mockMacroMetrics) : (DISABLE_MOCK_DATA ? [] : mockMacroMetrics);
+  let macroMetrics = derived ? buildMacroMetrics(derived, DISABLE_MOCK_DATA ? [] : mockMacroMetrics) : (DISABLE_MOCK_DATA ? [] : mockMacroMetrics);
+  // Apply FRED India CPI override
+  if (cpiYoY != null) {
+    const diff = cpiYoY.prev != null ? +(cpiYoY.value - cpiYoY.prev).toFixed(2) : null;
+    const mo   = new Date(cpiYoY.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    macroMetrics = macroMetrics.map(m => m.label === 'CPI Infl.' ? {
+      ...m,
+      value:  `${cpiYoY.value.toFixed(2)}%`,
+      sub:    `India YoY ${mo}`,
+      change: diff != null ? `${diff >= 0 ? '+' : ''}${diff.toFixed(2)}pp` : '—',
+      up:     diff != null ? diff <= 0 : null,
+    } : m);
+  }
+  // Apply env-configured repo rate
+  if (liveRepoRate != null) {
+    macroMetrics = macroMetrics.map(m => m.label === 'Repo Rate' ? {
+      ...m, value: `${liveRepoRate.toFixed(2)}%`,
+    } : m);
+  }
   const topMovers    = (derived?.liveMovers?.length > 0) ? derived.liveMovers : (DISABLE_MOCK_DATA ? [] : mockMovers);
   const sectors      = (derived?.liveSectors?.length > 0) ? derived.liveSectors : (DISABLE_MOCK_DATA ? [] : mockSectors);
   // History priority: CPA (official, purpose-built) → AV monthly → Yahoo
@@ -240,7 +260,6 @@ export default function App() {
               inflation={DISABLE_MOCK_DATA ? [] : inflation}
               repoRate={DISABLE_MOCK_DATA ? [] : repoRate}
               usdinr={DISABLE_MOCK_DATA ? [] : usdinr}
-              fiiFlow={DISABLE_MOCK_DATA ? [] : fiiFlow}
             />
 
             <div style={{ marginTop: 32 }}>
