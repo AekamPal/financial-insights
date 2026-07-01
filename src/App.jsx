@@ -304,7 +304,7 @@ function buildMacroMetrics(derived, mock) {
     const override = derived.macroOverrides.find(o =>
       o.key === m.label || KEY_ALIASES[o.key] === m.label
     );
-    if (override) return { ...m, label: override.key, value: override.value, change: override.change, up: override.up };
+    if (override) return { ...m, label: override.key, value: override.value, change: override.change, up: override.up, sub: override.sub ?? m.sub };
     return m;
   });
   // Append live-only cards not in mock (e.g. INR/USD)
